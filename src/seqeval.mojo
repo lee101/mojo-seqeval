@@ -1,11 +1,8 @@
 """Sequence-labelling metric kernels exposed through a small C ABI."""
 
-from std.algorithm import parallelize
 from std.sys.info import simd_width_of
 
-comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
-comptime PARALLEL_EXTRACT_THRESHOLD = 1_500_000
-
+comptime IPtr = Pointer[Int64, AnyOrigin[mut=True]]
 comptime O = 0
 comptime I = 1
 comptime B = 2
@@ -132,9 +129,9 @@ def strict_end(prev: Int, current: Int, scheme: Int) -> Bool:
 def write_entity(
     types: IPtr, starts: IPtr, ends: IPtr, count: Int, code: Int, start: Int, end: Int
 ):
-    types[count] = Int64(entity_type(code))
-    starts[count] = Int64(start)
-    ends[count] = Int64(end)
+    types[unsafe_offset=count] = Int64(entity_type(code))
+    starts[unsafe_offset=count] = Int64(start)
+    ends[unsafe_offset=count] = Int64(end)
 
 
 def extract_default(
@@ -148,7 +145,7 @@ def extract_default(
     var begin = 0
     var count = 0
     for pos in range(n + 1):
-        var current = Int(codes[pos]) if pos < n else O
+        var current = Int(codes[unsafe_offset=pos]) if pos < n else O
         if default_end(prev, current):
             write_entity(types, starts, ends, count, prev, begin, pos - 1)
             count += 1
@@ -170,24 +167,24 @@ def extract_strict(
     var prev = O
     var count = 0
     while pos < n:
-        var current = Int(codes[pos])
+        var current = Int(codes[unsafe_offset=pos])
         if strict_start(prev, current, scheme):
             var scan = pos + 1
             var inside_prev = current
             while scan <= n:
-                var following = Int(codes[scan]) if scan < n else O
+                var following = Int(codes[unsafe_offset=scan]) if scan < n else O
                 if not strict_inside(inside_prev, following, scheme):
                     break
                 inside_prev = following
                 scan += 1
-            var following = Int(codes[scan]) if scan < n else O
+            var following = Int(codes[unsafe_offset=scan]) if scan < n else O
             if strict_end(inside_prev, following, scheme):
                 write_entity(types, starts, ends, count, current, pos, scan - 1)
                 count += 1
             pos = scan
         else:
             pos += 1
-        prev = Int(codes[pos - 1])
+        prev = Int(codes[unsafe_offset=pos - 1])
     return count
 
 
@@ -242,31 +239,12 @@ def mse_extract_pair_default(
     var pred_ends = ptr(pred_ends_addr)
     var counts = ptr(counts_addr)
 
-    if n_true + n_pred < PARALLEL_EXTRACT_THRESHOLD:
-        counts[0] = Int64(
-            extract_default(true_codes, n_true, true_types, true_starts, true_ends)
-        )
-        counts[1] = Int64(
-            extract_default(pred_codes, n_pred, pred_types, pred_starts, pred_ends)
-        )
-        return
-
-    @parameter
-    def extract_one(task: Int):
-        if task == 0:
-            counts[0] = Int64(
-                extract_default(
-                    true_codes, n_true, true_types, true_starts, true_ends
-                )
-            )
-        else:
-            counts[1] = Int64(
-                extract_default(
-                    pred_codes, n_pred, pred_types, pred_starts, pred_ends
-                )
-            )
-
-    parallelize[extract_one](2, 2)
+    counts[unsafe_offset=0] = Int64(
+        extract_default(true_codes, n_true, true_types, true_starts, true_ends)
+    )
+    counts[unsafe_offset=1] = Int64(
+        extract_default(pred_codes, n_pred, pred_types, pred_starts, pred_ends)
+    )
 
 
 @export("mse_extract_pair_strict")
@@ -294,35 +272,12 @@ def mse_extract_pair_strict(
     var pred_ends = ptr(pred_ends_addr)
     var counts = ptr(counts_addr)
 
-    if n_true + n_pred < PARALLEL_EXTRACT_THRESHOLD:
-        counts[0] = Int64(
-            extract_strict(
-                true_codes, n_true, scheme, true_types, true_starts, true_ends
-            )
-        )
-        counts[1] = Int64(
-            extract_strict(
-                pred_codes, n_pred, scheme, pred_types, pred_starts, pred_ends
-            )
-        )
-        return
-
-    @parameter
-    def extract_one(task: Int):
-        if task == 0:
-            counts[0] = Int64(
-                extract_strict(
-                    true_codes, n_true, scheme, true_types, true_starts, true_ends
-                )
-            )
-        else:
-            counts[1] = Int64(
-                extract_strict(
-                    pred_codes, n_pred, scheme, pred_types, pred_starts, pred_ends
-                )
-            )
-
-    parallelize[extract_one](2, 2)
+    counts[unsafe_offset=0] = Int64(
+        extract_strict(true_codes, n_true, scheme, true_types, true_starts, true_ends)
+    )
+    counts[unsafe_offset=1] = Int64(
+        extract_strict(pred_codes, n_pred, scheme, pred_types, pred_starts, pred_ends)
+    )
 
 
 def entity_less(
@@ -360,24 +315,24 @@ def mse_count_entities(
     var pred_counts = ptr(pred_counts_addr)
     var tp_counts = ptr(tp_counts_addr)
     for t in range(n_types):
-        true_counts[t] = 0
-        pred_counts[t] = 0
-        tp_counts[t] = 0
+        true_counts[unsafe_offset=t] = 0
+        pred_counts[unsafe_offset=t] = 0
+        tp_counts[unsafe_offset=t] = 0
     for idx in range(n_true):
-        true_counts[Int(true_types[idx])] += 1
+        true_counts[unsafe_offset=Int(true_types[unsafe_offset=idx])] += 1
     for idx in range(n_pred):
-        pred_counts[Int(pred_types[idx])] += 1
+        pred_counts[unsafe_offset=Int(pred_types[unsafe_offset=idx])] += 1
     var ti = 0
     var pi = 0
     while ti < n_true and pi < n_pred:
-        var tt = Int(true_types[ti])
-        var ts = Int(true_starts[ti])
-        var te = Int(true_ends[ti])
-        var pt = Int(pred_types[pi])
-        var ps = Int(pred_starts[pi])
-        var pe = Int(pred_ends[pi])
+        var tt = Int(true_types[unsafe_offset=ti])
+        var ts = Int(true_starts[unsafe_offset=ti])
+        var te = Int(true_ends[unsafe_offset=ti])
+        var pt = Int(pred_types[unsafe_offset=pi])
+        var ps = Int(pred_starts[unsafe_offset=pi])
+        var pe = Int(pred_ends[unsafe_offset=pi])
         if tt == pt and ts == ps and te == pe:
-            tp_counts[tt] += 1
+            tp_counts[unsafe_offset=tt] += 1
             ti += 1
             pi += 1
         elif entity_less(ts, te, tt, ps, pe, pt):
@@ -409,8 +364,8 @@ def mse_token_counts(
     var tn_vec = SIMD[DType.int64, W](0)
     var idx = 0
     while idx + W <= n:
-        var a = truth.load[width=W](idx)
-        var b = pred.load[width=W](idx)
+        var a = truth.unsafe_load[width=W](idx)
+        var b = pred.unsafe_load[width=W](idx)
         var equal = a.eq(b)
         var a_zero = a.eq(0)
         var b_zero = b.eq(0)
@@ -426,8 +381,8 @@ def mse_token_counts(
     false_neg += Int(false_neg_vec.reduce_add())
     tn += Int(tn_vec.reduce_add())
     while idx < n:
-        var a = Int(truth[idx])
-        var b = Int(pred[idx])
+        var a = Int(truth[unsafe_offset=idx])
+        var b = Int(pred[unsafe_offset=idx])
         if a == b:
             correct += 1
         if a == b and (a != 0 or b != 0):
@@ -439,8 +394,8 @@ def mse_token_counts(
         if a == 0 and b == 0:
             tn += 1
         idx += 1
-    result[0] = Int64(correct)
-    result[1] = Int64(tp)
-    result[2] = Int64(fp)
-    result[3] = Int64(false_neg)
-    result[4] = Int64(tn)
+    result[unsafe_offset=0] = Int64(correct)
+    result[unsafe_offset=1] = Int64(tp)
+    result[unsafe_offset=2] = Int64(fp)
+    result[unsafe_offset=3] = Int64(false_neg)
+    result[unsafe_offset=4] = Int64(tn)
