@@ -73,6 +73,13 @@ def test_nested_entity_offsets_match_upstream():
     assert ours.get_entities(labels) == upstream.get_entities(labels)
 
 
+def test_entity_flattening_preserves_nested_input():
+    labels = [["B-X", "I-X"], ["S-Y"]]
+    snapshot = [sentence.copy() for sentence in labels]
+    assert ours._flatten_entities(labels) == ["B-X", "I-X", "O", "S-Y", "O"]
+    assert labels == snapshot
+
+
 def test_suffix_form_matches_upstream():
     truth = [["PER-B", "PER-I", "O", "LOC-S"]]
     pred = [["PER-B", "PER-I", "O", "LOC-S"]]

@@ -63,24 +63,32 @@ pixi run python -c 'from mojoseqeval.metrics import f1_score; print(f1_score([["
 
 ## Benchmark
 
-Measured on 2026-07-30 with an Intel Xeon E5-2697 v4 at 2.30 GHz, Linux
+Measured on 2026-08-27 with an Intel Xeon E5-2697 v4 at 2.30 GHz, Linux
 x86-64. Times are the best of three warm runs on the same 500,000-token
 corpus. Run them only through `pixi run bench`, which takes a machine-wide
 lock.
 
 | operation | mojo-seqeval | seqeval 1.2.2 | speedup |
 |---|---:|---:|---:|
-| f1_score, 500k tokens | 163.3 ms | 1080.7 ms | 6.62x |
-| classification_report, 500k tokens | 171.8 ms | 6813.3 ms | 39.65x |
-| get_entities, 500k tokens | 85.9 ms | 423.1 ms | 4.93x |
-| accuracy_score, 500k tokens | 37.7 ms | 89.0 ms | 2.36x |
+| f1_score, 500k tokens | 73.7 ms | 920.6 ms | 12.50x |
+| classification_report, 500k tokens | 71.4 ms | 4545.0 ms | 63.64x |
+| get_entities, 500k tokens | 58.4 ms | 405.1 ms | 6.94x |
+| accuracy_score, 500k tokens | 18.2 ms | 51.1 ms | 2.81x |
+
+The thresholded paired-extraction path was also measured against two serial
+calls in the same locked run:
+
+| paired extraction probe | serial | thresholded parallel | speedup |
+|---|---:|---:|---:|
+| 2 x 750,003 codes | 16.1 ms | 14.0 ms | 1.16x |
 
 Entity-heavy metrics benefit from cached tag encoding and the compiled state
 machine. Independent true/predicted scans run in parallel above 1.5 million
 combined tokens; smaller inputs stay serial to avoid thread-launch overhead.
 Token count aggregation uses SIMD with a scalar remainder loop. Accuracy avoids
 integer compaction entirely and compares the original strings without flattening
-copies.
+copies. Nested entity input is flattened without copying each sentence, and
+entity result arrays are converted to Python integers in bulk.
 
 GPU acceleration is intentionally not included. These kernels perform
 single-pass integer comparisons and state transitions with well under roughly

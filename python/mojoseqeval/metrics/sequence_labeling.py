@@ -37,7 +37,11 @@ def check_consistent_length(y_true, y_pred):
 
 def _flatten_entities(seq):
     if any(isinstance(item, list) for item in seq):
-        return [tag for sentence in seq for tag in sentence + ["O"]]
+        flat = []
+        for sentence in seq:
+            flat.extend(sentence)
+            flat.append("O")
+        return flat
     return list(seq)
 
 
@@ -483,9 +487,12 @@ def get_entities(seq, suffix=False):
         count=len(flat),
     )
     types, starts, ends = _extract(codes, 0)
+    type_ids = types.tolist()
+    start_values = starts.tolist()
+    end_values = ends.tolist()
     return [
-        (names[int(type_id)], int(start), int(end))
-        for type_id, start, end in zip(types, starts, ends)
+        (names[type_id], start, end)
+        for type_id, start, end in zip(type_ids, start_values, end_values)
     ]
 
 

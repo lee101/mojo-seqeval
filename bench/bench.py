@@ -9,6 +9,8 @@ import random
 import sys
 import time
 
+import numpy as np
+
 sys.path.insert(
     0,
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python"),
@@ -16,6 +18,7 @@ sys.path.insert(
 
 import mojoseqeval as mse  # noqa: E402
 from mojoseqeval.metrics.sequence_labeling import get_entities as mojo_entities  # noqa: E402
+from mojoseqeval.metrics.sequence_labeling import _extract, _extract_pair  # noqa: E402
 from seqeval.metrics import (  # noqa: E402
     accuracy_score as upstream_accuracy,
     classification_report as upstream_report,
@@ -95,6 +98,22 @@ def main():
             f"| {name} | {mojo_time * 1000:.1f} ms | "
             f"{upstream_time * 1000:.1f} ms | {upstream_time / mojo_time:.2f}x |"
         )
+
+    pair_size = 750_003
+    codes = np.full(pair_size, 18, dtype=np.int64)
+    serial = lambda: (_extract(codes, 0), _extract(codes, 0))
+    thresholded = lambda: _extract_pair(codes, codes, 0)
+    serial()
+    thresholded()
+    serial_time = timeit(serial)
+    parallel_time = timeit(thresholded)
+    print()
+    print("| paired extraction probe | serial | thresholded parallel | speedup |")
+    print("|---|---:|---:|---:|")
+    print(
+        f"| 2 x {pair_size:,} codes | {serial_time * 1000:.1f} ms | "
+        f"{parallel_time * 1000:.1f} ms | {serial_time / parallel_time:.2f}x |"
+    )
 
 
 if __name__ == "__main__":
