@@ -1,6 +1,5 @@
 """Sequence-labelling metric kernels exposed through a small C ABI."""
 
-from max.algorithm import parallelize
 from std.sys.info import simd_width_of
 
 comptime IPtr = Pointer[Int64, AnyOrigin[mut=True]]
@@ -12,7 +11,6 @@ comptime S = 4
 comptime U = 5
 comptime L = 6
 comptime DOT = 7
-comptime PAIR_PARALLEL_THRESHOLD = 1_500_000
 
 
 def ptr(addr: Int) -> IPtr:
@@ -241,26 +239,16 @@ def mse_extract_pair_default(
     var pred_ends = ptr(pred_ends_addr)
     var counts = ptr(counts_addr)
 
-    @__parameter
-    def extract_one(task: Int):
-        if task == 0:
-            counts[unsafe_offset=0] = Int64(
-                extract_default(
-                    true_codes, n_true, true_types, true_starts, true_ends
-                )
-            )
-        else:
-            counts[unsafe_offset=1] = Int64(
-                extract_default(
-                    pred_codes, n_pred, pred_types, pred_starts, pred_ends
-                )
-            )
-
-    if n_true + n_pred >= PAIR_PARALLEL_THRESHOLD:
-        parallelize[extract_one](2, 2)
-    else:
-        extract_one(0)
-        extract_one(1)
+    counts[unsafe_offset=0] = Int64(
+        extract_default(
+            true_codes, n_true, true_types, true_starts, true_ends
+        )
+    )
+    counts[unsafe_offset=1] = Int64(
+        extract_default(
+            pred_codes, n_pred, pred_types, pred_starts, pred_ends
+        )
+    )
 
 
 @export("mse_extract_pair_strict")
@@ -288,36 +276,16 @@ def mse_extract_pair_strict(
     var pred_ends = ptr(pred_ends_addr)
     var counts = ptr(counts_addr)
 
-    @__parameter
-    def extract_one(task: Int):
-        if task == 0:
-            counts[unsafe_offset=0] = Int64(
-                extract_strict(
-                    true_codes,
-                    n_true,
-                    scheme,
-                    true_types,
-                    true_starts,
-                    true_ends,
-                )
-            )
-        else:
-            counts[unsafe_offset=1] = Int64(
-                extract_strict(
-                    pred_codes,
-                    n_pred,
-                    scheme,
-                    pred_types,
-                    pred_starts,
-                    pred_ends,
-                )
-            )
-
-    if n_true + n_pred >= PAIR_PARALLEL_THRESHOLD:
-        parallelize[extract_one](2, 2)
-    else:
-        extract_one(0)
-        extract_one(1)
+    counts[unsafe_offset=0] = Int64(
+        extract_strict(
+            true_codes, n_true, scheme, true_types, true_starts, true_ends
+        )
+    )
+    counts[unsafe_offset=1] = Int64(
+        extract_strict(
+            pred_codes, n_pred, scheme, pred_types, pred_starts, pred_ends
+        )
+    )
 
 
 def entity_less(

@@ -75,16 +75,14 @@ lock.
 | get_entities, 500k tokens | 58.4 ms | 405.1 ms | 6.94x |
 | accuracy_score, 500k tokens | 18.2 ms | 51.1 ms | 2.81x |
 
-The thresholded paired-extraction path was also measured against two serial
-calls in the same locked run:
-
-| paired extraction probe | serial | thresholded parallel | speedup |
-|---|---:|---:|---:|
-| 2 x 750,003 codes | 16.1 ms | 14.0 ms | 1.16x |
-
 Entity-heavy metrics benefit from cached tag encoding and the compiled state
-machine. Independent true/predicted scans run in parallel above 1.5 million
-combined tokens; smaller inputs stay serial to avoid thread-launch overhead.
+machine. The two entity extractions of a paired call run back to back on one
+thread: the 1.1.0 port split them across two workers above 1.5 million combined
+tokens for a measured 1.16x, and Mojo 1.2 removed closure capture, so that split
+is no longer expressible inside a `parallelize` body. Two-way work is also the
+hard ceiling for any fan-out here, and the scan is a branchy integer state
+machine rather than arithmetic-heavy numeric work, so serial execution is the
+honest answer.
 Token count aggregation uses SIMD with a scalar remainder loop. Accuracy avoids
 integer compaction entirely and compares the original strings without flattening
 copies. Nested entity input is flattened without copying each sentence, and
